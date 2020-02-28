@@ -15,12 +15,7 @@
 #include <sys/filio.h>
 #endif
 
-void usage(void);
-int sock_connect(const char *hname, int port);
-int main(int argc, char *argv[]);
-
 #define BUFSIZE 4096
-char linefeed[] = "\r\n\r\n";
 
 void usage(void) {
   printf("usage: corkscrew <proxyhost> <proxyport> <desthost> <destport> "
@@ -51,7 +46,7 @@ int sock_connect(const char *hname, int port) {
 }
 
 int main(int argc, char *argv[]) {
-  char uri[BUFSIZE], buffer[BUFSIZE], version[BUFSIZE], descr[BUFSIZE];
+  char uri[BUFSIZE], buffer[BUFSIZE];
   char *host = NULL, *desthost = NULL, *destport = NULL;
   char *up = NULL, line[4096];
   int port, sent, setup, code, csock;
