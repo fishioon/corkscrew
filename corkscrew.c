@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/event.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -47,13 +48,11 @@ int sock_connect(const char *hname, int port) {
 
 int main(int argc, char *argv[]) {
   char uri[BUFSIZE], buffer[BUFSIZE];
-  char *host = NULL, *desthost = NULL, *destport = NULL;
-  char *up = NULL, line[4096];
-  int port, sent, setup, code, csock;
-  fd_set rfd, sfd;
-  struct timeval tv;
+  char *host = NULL, *desthost = NULL, *destport = NULL, *up = NULL;
+  int port, csock, infd, outfd, kq, nev, i, evfd;
+  struct timespec timeout;
+  struct kevent kev[2], events[2];
   ssize_t len;
-  FILE *fp;
 
   if (argc < 5) {
     usage();
@@ -86,36 +85,34 @@ int main(int argc, char *argv[]) {
   if (len <= 0) {
     exit(-1);
   }
-  // sscanf(buffer, "%s%d%[^\n]", version, &code, descr);
 
-  tv.tv_sec = 5;
-  tv.tv_usec = 0;
+  infd = STDIN_FILENO;
+  outfd = STDOUT_FILENO;
+  timeout.tv_sec = 5;
+  timeout.tv_nsec = 0;
+  kq = kqueue();
+  EV_SET(&kev[0], csock, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, &csock);
+  EV_SET(&kev[1], infd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, &infd);
   for (;;) {
-    FD_ZERO(&sfd);
-    FD_ZERO(&rfd);
-    FD_SET(csock, &sfd);
-    FD_SET(csock, &rfd);
-    FD_SET(0, &rfd);
-
-    if (select(csock + 1, &rfd, &sfd, NULL, &tv) == -1)
-      break;
-
-    if (FD_ISSET(csock, &rfd)) {
-      len = read(csock, buffer, sizeof(buffer));
-      if (len <= 0)
-        break;
-      len = write(1, buffer, len);
-      if (len <= 0)
-        break;
-    }
-
-    if (FD_ISSET(0, &rfd)) {
-      len = read(0, buffer, sizeof(buffer));
-      if (len <= 0)
-        break;
-      len = write(csock, buffer, len);
-      if (len <= 0)
-        break;
+    nev = kevent(kq, kev, 2, events, 2, &timeout);
+    for (i = 0; i < nev; ++i) {
+      evfd = *((int *)events[i].udata);
+      if (evfd == csock) {
+        len = read(csock, buffer, sizeof(buffer));
+        if (len <= 0)
+          break;
+        len = write(outfd, buffer, len);
+        if (len <= 0)
+          break;
+      }
+      if (evfd == infd) {
+        len = read(infd, buffer, sizeof(buffer));
+        if (len <= 0)
+          break;
+        len = write(csock, buffer, len);
+        if (len <= 0)
+          break;
+      }
     }
   }
   exit(0);
